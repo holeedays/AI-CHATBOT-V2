@@ -11,9 +11,12 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+# load our env file, now it's accessible via os
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
@@ -31,6 +34,13 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    # our asgi application 
+    'daphne',
+    # deals with websockets interactions
+    'channels',
+
+    'cbot.apps.CbotConfig',
+
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -67,6 +77,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'cb_site.wsgi.application'
+ASGI_APPLICATION = 'cb_site.asgi.application'
 
 
 # Database

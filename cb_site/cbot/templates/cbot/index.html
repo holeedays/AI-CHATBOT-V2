@@ -1,0 +1,22 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+</head>
+<body>
+
+    <div id="chat_window">
+    </div>
+    <div id="user_bar">
+        <input id="input_area"></input>
+        <button id="submit_button"></button>
+    </div>
+
+    <script type="module" src="{% static 'cbot/js/main.js' %}"></script>
+</body>
+</html>
