@@ -1,14 +1,15 @@
 declare class ChatLogic {
-    private ws;
     private inputArea;
     private chatWindow;
     private submitButton;
-    private tm;
+    private tt;
+    private ws;
     constructor();
     private initializeSubmitButton;
     private initializeWebsocket;
     private initializeEnterKey;
     private onSubmit;
+    private reset;
     private onResponse;
 }
 export default ChatLogic;

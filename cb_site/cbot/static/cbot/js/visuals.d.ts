@@ -1,9 +1,4 @@
-declare class TextTyper {
-    queue: Promise<void>;
-    constructor();
-    type(htmlElem: JQuery<HTMLElement>, targetText: string, timeSpanMS: number): void;
-    addToQueue(task: () => Promise<void>): void;
-    typeText(htmlElem: JQuery<HTMLElement>, targetText: string, timeSpanMS: number): Promise<void>;
+declare namespace TextFunctionalities {
 }
-export default TextTyper;
+export default TextFunctionalities;
 //# sourceMappingURL=visuals.d.ts.map

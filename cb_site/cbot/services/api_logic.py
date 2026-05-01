@@ -4,17 +4,17 @@ from openai.types.responses.response_stream_event import ResponseStreamEvent
 
 import os
 import re
-from typing import Any, Generator
-from partialjson import JSONParser
+from typing import Any, AsyncGenerator
+# from partialjson import JSONParser
 
 # our container for the output of the model
 from .ai_outputs import StructuredOutput
 
-from dotenv import load_dotenv
-load_dotenv(".env")
+# from dotenv import load_dotenv
+# load_dotenv(".env")
 
-
-class CB():
+# logic regarding requests and context compression with the gemini and openai api
+class ApiLogic():
     # maybe model specification
 
     # might use a hybrid of models --
@@ -24,63 +24,55 @@ class CB():
     def __init__(self, 
                  gemini_model: str = "gemini-3.1-flash-lite-preview", 
                  openai_model: str = "gpt-5.4-nano",
-                 embedding_model: str = "text-embedding-3-small",
-                 context: list[dict[str, Any]] | None = None) -> None:
+                 embedding_model: str = "text-embedding-3-small") -> None:
         self._setup_apis()
-        self._setup_variables(gemini_model, openai_model, embedding_model, context)
+        self._setup_variables(gemini_model, openai_model, embedding_model)
     
     def _setup_apis(self) -> None:
         self.openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.google_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        # openai has a separate async client for async requests
+        self.openai_client_async = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    ####################################################################### setup
     
     def _setup_variables(self, 
                          gemini_model: str, 
                          openai_model: str, 
-                         embedding_model: str, 
-                         context: list[dict[str, Any]] | None) -> None:
+                         embedding_model: str
+                         ) -> None:
         # setup our global variables
-
-        # token counts and context storage (CONTEXT STORAGE ONLY TEMPORARY)
-        self.context: list[dict[str, Any]] = context if not context is None else []
-        self.context_size_limit: int = 5000
-
+        
         # models
         self.gemini_model = gemini_model
         self.openai_model = openai_model
         self.embedding_model = embedding_model
-        
-    # bools we can use later for model identification
-    def is_openai_model(self, model: str) -> bool:
-        regex: str = r"(?i)gpt"
-        return not re.match(regex, model) is None
     
-    def is_gemini_model(self, model: str) -> bool:
-        regex: str = r"(?i)gemini"
-        return not re.match(regex, model) is None
+    ####################################################################### context compression
     
     # our context is ordered in a complicated JSON format with metadata and other misc information included
     # but in the case of context compression we only need the raw text, this function does this
-    def extract_context_to_str(self) -> str:
-
+    def extract_context_to_str(self, context: list[dict[str, Any]]) -> str:
         # helper function to extract our context into a string format for the model to read
         context_str: str = ""
-        for item in self.context:
-            if (item["role"] == "user"):
-                context_str += f"User: {item['content']}\n"
-            elif (item["role"] == "system"):
-                context_str += f"System: {item['content']['response']}\n"
-        
+        for chat_pair in context:
+            for party in chat_pair:
+                if (party == "user"):
+                    context_str += f"{party}: {chat_pair[party]}\n"
+                elif (party == "system"):
+                    context_str += f"{party}: {chat_pair[party]['response']}\n"
+
         return context_str
 
+    # compress our context and return it
+    def compress_context(self, model: str, context: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
-    # compress our context
-    def get_compressed_context(self, model: str) -> list[dict[str, Any]]:
-
-        if (self.context == []):
+        if (context == list()):
             raise Exception("Context is empty, cannot be compressed; please remove this method or relocate")
 
         # get all raw text of context
-        context_str = self.extract_context_to_str()
+        context_str = self.extract_context_to_str(context)
+        # initialize a field to hold our newly created context
+        compressed_context: list[dict[str, Any]] = list()
         # initial prompt instructions
         prompt: str = f"""
                         Please compress the existing context given here: {context_str}.
@@ -93,9 +85,9 @@ class CB():
                 response = self.generate_response_openai(model, prompt)
                 # essentially refresh our context with the summarized one
                 if (not response is None):
-                    self.context = [{
-                                    "role": "system", 
-                                    "content": response.model_dump()
+                    compressed_context = [{
+                                    "user": "",
+                                    "system": response.model_dump()
                                     }] 
                 else:
                     print("The openai API yielded an error, so it returned None. Keeping the previous context instead.")
@@ -107,9 +99,9 @@ class CB():
                 response = self.generate_response_gemini(model, prompt)
                 # same for gemini though only if the response is not None, or else just send the previous context
                 if (not response is None):
-                    self.context = [{
-                                    "role": "system", 
-                                    "content": response.model_dump()
+                    compressed_context = [{
+                                    "user": "",
+                                    "system": response.model_dump()
                                     }] 
                 else:
                     print("Something went wrong with the gemini API. Response was None. Keeping the previous context instead.")
@@ -121,7 +113,12 @@ class CB():
             raise Exception("This model isn't a openai or gemini model, please use a valid one")
         
         # return the summarized context or unaltered context
-        return self.context
+        if (compressed_context == list()):
+            return context
+
+        return compressed_context
+    
+    ####################################################################### response generation (read stream and full response)
 
     # boiler plater method for generating a reponse from the openai api
     def generate_response_openai(self, model: str, prompt: str) -> StructuredOutput | None:
@@ -149,15 +146,18 @@ class CB():
         return response.output_parsed
     
     # sends response as multiple chunks, provides more dyanmic feedback
-    # Generator type is as follows [yieldtype, sendtype, returntype]
-    def generate_response_stream_openai(self, 
+    # async type hints are following AyncGenerator[yield_type, send_type]
+    # generators are more so like Generator[yield_type, send_type, return_type]
+    # NOTE: that there is a synchronous mode of this, just with the regular client; also gemini has one
+    # too, but you access it through genai.client.aio instead of genai.client
+    async def generate_response_stream_openai(self, 
                                         model: str, 
-                                        prompt: str) -> Generator[ResponseStreamEvent, None, None]:
+                                        prompt: str) -> AsyncGenerator[ResponseStreamEvent, None]:
         # openai is a bit differnt that google with streaming (and documentation too :/)
         # the response stream obj is a response manager class that is not directly iterable
         # however it has __enter__() and exit__() methods meaning it can be accessed by the with-as statement block 
         # (also called context manager), from there we can iterate the response stream object as in gemini's case
-        with self.openai_client.responses.stream(
+        async with self.openai_client_async.responses.stream(
             model=model,
             input=[
                 {
@@ -172,7 +172,7 @@ class CB():
             ],
             text_format=StructuredOutput,
         ) as response_stream:
-            for chunk in response_stream:
+            async for chunk in response_stream:
                 yield chunk
     
     # similar boiler plate method for gemini
@@ -192,11 +192,11 @@ class CB():
         return None
     
     # Same response stream with gemini
-    def generate_response_stream_gemini(self, 
+    async def generate_response_stream_gemini(self, 
                                         model: str, 
-                                        prompt: str) -> Generator[genai.types.GenerateContentResponse, None, None]:
+                                        prompt: str) -> AsyncGenerator[genai.types.GenerateContentResponse, None]:
 
-        response_stream = self.google_client.models.generate_content_stream( #type: ignore
+        response_stream = self.google_client.aio.models.generate_content_stream( #type: ignore
             model=model,
             contents=prompt,
             config= {
@@ -205,14 +205,32 @@ class CB():
             }        
         )
 
-        for chunk in response_stream:
+        async for chunk in await response_stream:
             yield chunk
 
-    def is_last_chunk_gemini(self, chunk: genai.types.GenerateContentResponse) -> bool:
+    ####################################################################### boolean checks (if model is gemini or openai)
+
+    @classmethod
+    # determines if (in a readstream, this is the last chunk of the message)
+    def is_last_chunk_gemini(cls, chunk: genai.types.GenerateContentResponse) -> bool:
         return not chunk.candidates[0].finish_reason is None #type: ignore
 
-    def is_last_chunk_openai(self, chunk: ResponseStreamEvent) -> bool:
-        return chunk.type == "response.completed" # type: ignore
+    @classmethod
+    def is_last_chunk_openai(cls, chunk: ResponseStreamEvent) -> bool:
+        return chunk.type == "response.output_text.done" 
+    
+    @classmethod
+    # bools we can use for model identification
+    def is_openai_model(cls, model: str) -> bool:
+        regex: str = r"(?i)gpt"
+        return not re.match(regex, model) is None
+    
+    @classmethod
+    def is_gemini_model(cls, model: str) -> bool:
+        regex: str = r"(?i)gemini"
+        return not re.match(regex, model) is None
+    
+
 
         
 # if __name__ == "__main__":

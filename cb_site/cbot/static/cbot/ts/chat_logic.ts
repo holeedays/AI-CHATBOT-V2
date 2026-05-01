@@ -1,13 +1,14 @@
-import TextManipulator from "./visuals.ts";
+import {TypingFunctionalities} from "./text_manipulating.ts";
 
 class ChatLogic {
-    private ws: WebSocket;
 
     private inputArea: JQuery<HTMLInputElement>;
     private chatWindow: JQuery<HTMLDivElement>;
     private submitButton: JQuery<HTMLButtonElement>;
 
-    private tm: TextManipulator;
+    private tt: TypingFunctionalities.TextTyper;
+
+    private ws: WebSocket;
     
     constructor() {
         // get all HTML elements
@@ -31,7 +32,7 @@ class ChatLogic {
         this.initializeWebsocket();
 
         // misc
-        this.tm = new TextManipulator();
+        this.tt = new TypingFunctionalities.TextTyper();
     }
 
     // connect submit button to a method
@@ -50,6 +51,8 @@ class ChatLogic {
         }
 
         this.ws.onmessage = (ev: MessageEvent) => this.onResponse(ev);
+
+        this.ws.onerror = (ev: Event) => {console.error("WebSocket error:", ev)};
     }
 
     // check for enterkey
@@ -61,27 +64,47 @@ class ChatLogic {
     }
 
     // our callback when user submits a request
-    private onSubmit(): void {
+    private async onSubmit(): Promise<void> {
         // btw, we use .val() instead of .text() for input html elements
         const message: string | undefined = this.inputArea.val();
 
-        if (this.ws.readyState === WebSocket.CLOSED || message === undefined) {
-            console.warn("Either the current websocket connection is closed or message is undefined");
+        if (message === undefined) {
+            console.warn("Message is undefined, doing nothing");
             return;
         }
 
-        this.chatWindow.append(`
-            <p id="user_input">
-                <strong>User:</strong> ${message}
-            </p>
-        `);
+        // add the user to the window chat
+        const trimmedMessage: string = message.trim();
+        if (trimmedMessage.length === 0)
+            return;
+        // create a new object and edit it this way so that the user can't just add raw html
+        // to our page
+        const userInput = $("<p></p>").addClass("user_input");
+        userInput.append($("<strong></strong>").text("User:"));
+        userInput.append(document.createTextNode(` ${trimmedMessage}`));
+        this.chatWindow.append(userInput);
+    
+        this.inputArea.val("");
+        // await for a successful reset
+        await this.reset();
 
         const input_JSON: string = JSON.stringify({
-            "message": message
+            "message": trimmedMessage
         });
-        this.inputArea.val("");
-        
+
         this.ws.send(input_JSON);
+    }
+
+    // reset existing processes (used in onSubmit as a clear all thing)
+    private async reset(): Promise<void> {
+        // reset the text typer, removing anything from the queue
+        await this.tt.reset();
+        // remove the existing response if it exists
+        const existing_stream: JQuery<HTMLElement> = $("#response_stream");
+        if (existing_stream.length != 0) {
+            existing_stream.removeAttr("id");
+            existing_stream.addClass("completed_response");
+        }
     }
 
     // callback when our websocket gets a response (partial or full)
@@ -117,13 +140,14 @@ class ChatLogic {
             newResponse = $("#response_stream");
         }
         // queue the new response to be typed
-        this.tm.type(newResponse, responseBody, 300);
+        const typeSpeedMS: number = 2;
+        this.tt.type(newResponse, responseBody, TypingFunctionalities.TypingStyles.BY_LETTER, typeSpeedMS);
         // also check if response is finished, which we just cue at the end of the response being
         // successfully typed
         if (responseFinished) {
-            this.tm.addToQueue(() => new Promise((resolve) => {
-                newResponse.attr("id", "completed_response");
-            }));
+            this.tt.finish();
+            newResponse.removeAttr("id");
+            newResponse.addClass("completed_response");
         }
     }
 }

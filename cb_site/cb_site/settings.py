@@ -29,7 +29,7 @@ SECRET_KEY = 'django-insecure-o^^&79)&!c(&69u_@hr)m1=c9n86xn1f5sxpnz**2v2%1m3i3w
 DEBUG = True
 
 ALLOWED_HOSTS = []
-
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
 # Application definition
 
