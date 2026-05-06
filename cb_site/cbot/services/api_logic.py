@@ -8,7 +8,7 @@ from typing import Any, AsyncGenerator
 # from partialjson import JSONParser
 
 # our container for the output of the model
-from .ai_outputs import StructuredOutput
+from .ai_outputs import ChatOutput
 
 # from dotenv import load_dotenv
 # load_dotenv(".env")
@@ -22,8 +22,8 @@ class ApiLogic():
         # gpt for standard reasoning and user interactions(paid)
     
     def __init__(self, 
-                 gemini_model: str = "gemini-3.1-flash-lite-preview", 
-                 openai_model: str = "gpt-5.4-nano",
+                 gemini_model: str = "gemini-3-flash-preview", 
+                 openai_model: str = "gpt-5.4-mini-2026-03-17",
                  embedding_model: str = "text-embedding-3-small") -> None:
         self._setup_apis()
         self._setup_variables(gemini_model, openai_model, embedding_model)
@@ -121,7 +121,7 @@ class ApiLogic():
     ####################################################################### response generation (read stream and full response)
 
     # boiler plater method for generating a reponse from the openai api
-    def generate_response_openai(self, model: str, prompt: str) -> StructuredOutput | None:
+    def generate_response_openai(self, model: str, prompt: str) -> ChatOutput | None:
         response = self.openai_client.responses.parse( 
             model=model,
             input= [
@@ -136,7 +136,7 @@ class ApiLogic():
                 }
             ],
             # this should be the JSON schema specifier
-            text_format=StructuredOutput 
+            text_format=ChatOutput,
         )
         # since we specified a JSON schema, we should access the output through the .output_parsed attribute
         # since the response (sdk) object is exactly the same regardless, the only difference is the
@@ -170,24 +170,24 @@ class ApiLogic():
                     ]
                 }
             ],
-            text_format=StructuredOutput,
+            text_format=ChatOutput,
         ) as response_stream:
             async for chunk in response_stream:
                 yield chunk
     
     # similar boiler plate method for gemini
-    def generate_response_gemini(self, model: str, prompt: str) -> StructuredOutput | None:
+    def generate_response_gemini(self, model: str, prompt: str) -> ChatOutput | None:
         response = self.google_client.models.generate_content( #type: ignore
             model=model,
             contents=prompt,
             config= {
                 "response_mime_type": "application/json",
-                "response_json_schema": StructuredOutput.model_json_schema()
+                "response_json_schema": ChatOutput.model_json_schema()
             }
         )
         
         if (not response.text is None):
-            return StructuredOutput.model_validate_json(response.text)
+            return ChatOutput.model_validate_json(response.text)
         
         return None
     
@@ -201,7 +201,7 @@ class ApiLogic():
             contents=prompt,
             config= {
                 "response_mime_type": "application/json",
-                "response_json_schema": StructuredOutput.model_json_schema()
+                "response_json_schema": ChatOutput.model_json_schema()
             }        
         )
 

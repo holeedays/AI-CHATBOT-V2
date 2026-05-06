@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
-import os
 import sys
+import asyncio
+# this is just a fix for django channels and playwright's chromium launcher, we have to implement it in
+# the asgi.py file in our root and manage.py
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
+import os
 
 def main():
     """Run administrative tasks."""

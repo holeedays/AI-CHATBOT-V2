@@ -2,7 +2,7 @@ declare class ChatLogic {
     private inputArea;
     private chatWindow;
     private submitButton;
-    private tt;
+    private awaitingResponse;
     private ws;
     constructor();
     private initializeSubmitButton;
@@ -11,6 +11,7 @@ declare class ChatLogic {
     private onSubmit;
     private reset;
     private onResponse;
+    private generateQueuingText;
 }
 export default ChatLogic;
 //# sourceMappingURL=chat_logic.d.ts.map

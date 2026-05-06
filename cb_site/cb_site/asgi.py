@@ -7,6 +7,14 @@ For more information on this file, see
 https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/
 """
 
+import sys 
+import asyncio
+# this is just a fix for django channels and playwright's chromium launcher, we have to implement it in
+# the asgi.py file in our root and manage.py. it must be at the very top
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+
 import os
 from django.core.asgi import get_asgi_application
 
@@ -14,6 +22,7 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 
 import cbot.websocket.routing
+
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'cb_site.settings')
 

@@ -20,7 +20,8 @@
   },
   "homepage": "https://github.com/holeedays/AI-CHATBOT-V2#readme",
   "devDependencies": {
-    "@types/jquery": "^4.0.0"
+    "@types/jquery": "^4.0.0",
+    "@types/marked": "^5.0.2"
   },
   "dependencies": {
     "typescript": "^6.0.3"

@@ -126,3 +126,17 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+
+# Celery Configuration
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+
+# Celery Beat Schedule
+from datetime import timedelta
+CELERY_BEAT_SCHEDULE = { #type: ignore
+    'cleanup-old-sessions-at-midnight': {
+        'task': 'cbot.tasks.cleanup_unused_sessions',
+        'schedule': timedelta(days=1), 
+    }, 
+}

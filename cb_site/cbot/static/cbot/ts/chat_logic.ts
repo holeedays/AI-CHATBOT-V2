@@ -1,4 +1,4 @@
-import {TypingFunctionalities} from "./text_manipulating.ts";
+declare const marked: any;
 
 class ChatLogic {
 
@@ -6,9 +6,11 @@ class ChatLogic {
     private chatWindow: JQuery<HTMLDivElement>;
     private submitButton: JQuery<HTMLButtonElement>;
 
-    private tt: TypingFunctionalities.TextTyper;
+    private awaitingResponse: boolean;
+    private ignoringStrayChunks: boolean;
 
     private ws: WebSocket;
+
     
     constructor() {
         // get all HTML elements
@@ -32,7 +34,8 @@ class ChatLogic {
         this.initializeWebsocket();
 
         // misc
-        this.tt = new TypingFunctionalities.TextTyper();
+        this.awaitingResponse = false;
+        this.ignoringStrayChunks = false;
     }
 
     // connect submit button to a method
@@ -83,11 +86,18 @@ class ChatLogic {
         userInput.append($("<strong></strong>").text("User:"));
         userInput.append(document.createTextNode(` ${trimmedMessage}`));
         this.chatWindow.append(userInput);
-    
+        
+        // clear our input area
         this.inputArea.val("");
+        
         // await for a successful reset
         await this.reset();
 
+        // also start generating some queuing text to keep the person occupied
+        const timeBetweenPhraseMS: number = 4000;
+        this.generateQueuingText(timeBetweenPhraseMS);
+
+        // send our message
         const input_JSON: string = JSON.stringify({
             "message": trimmedMessage
         });
@@ -97,8 +107,6 @@ class ChatLogic {
 
     // reset existing processes (used in onSubmit as a clear all thing)
     private async reset(): Promise<void> {
-        // reset the text typer, removing anything from the queue
-        await this.tt.reset();
         // remove the existing response if it exists
         const existing_stream: JQuery<HTMLElement> = $("#response_stream");
         if (existing_stream.length != 0) {
@@ -108,7 +116,32 @@ class ChatLogic {
     }
 
     // callback when our websocket gets a response (partial or full)
-    private onResponse(ev: MessageEvent): void {
+    private async onResponse(ev: MessageEvent): Promise<void> {
+        if (this.ignoringStrayChunks) {
+            console.log("Deflected a stray chunk");
+            return;
+        }
+
+        this.awaitingResponse = false;
+        // Wait for queuing text to disappear
+        while ($("#queuing").length !== 0) {
+            await new Promise((res) => setTimeout(res, 50));
+        }
+        
+        // find our new response stream
+        let newResponse: JQuery<HTMLElement> = $("#response_stream");
+        // check if it exists, if not, add the element
+        if (newResponse.length === 0) {
+            this.chatWindow.append(`
+                <pre>
+                    <div id="response_stream">
+                    </div>
+                </pre>
+            `);
+            newResponse = $("#response_stream");
+        }
+
+        // actually get our response
         let responseBody: string;
         let responseFinished: boolean;
         const data = JSON.parse(ev.data);
@@ -128,27 +161,62 @@ class ChatLogic {
             return;
         }
 
-        // find our new response stream
-        let newResponse: JQuery<HTMLElement> = $("#response_stream");
-        // check if it exists, if not, add the element
-        if (newResponse.length === 0) {
+        const htmlContent = marked.parse(responseBody) as string;
+        
+        // Update our response stream with the new content
+        newResponse.html(`<strong>AIB:</strong> ${htmlContent}`);
+
+        // also check if response is finished
+        if (responseFinished) {
+            newResponse.removeAttr("id");
+            newResponse.addClass("completed_response");
+
+            const deflectionTimeMS: number = 500;
+            this.ignoringStrayChunks = true;
+            setTimeout(() => {
+                this.ignoringStrayChunks = false;
+            }, deflectionTimeMS);
+        }
+    }
+
+    // generate some text to keep the person occupied as a response is being generated
+    private async generateQueuingText(timeBetweenPhrasesMS: number) {
+        this.awaitingResponse = true;
+
+        let queuingText: JQuery<HTMLElement> = $("#queuing");
+        if (queuingText.length === 0) {
             this.chatWindow.append(`
-                <p id="response_stream">
+                <p id="queuing"> 
                     <strong>AIB:</strong>
                 </p>
             `);
-            newResponse = $("#response_stream");
+            queuingText = $("#queuing");
         }
-        // queue the new response to be typed
-        const typeSpeedMS: number = 2;
-        this.tt.type(newResponse, responseBody, TypingFunctionalities.TypingStyles.BY_LETTER, typeSpeedMS);
-        // also check if response is finished, which we just cue at the end of the response being
-        // successfully typed
-        if (responseFinished) {
-            this.tt.finish();
-            newResponse.removeAttr("id");
-            newResponse.addClass("completed_response");
+
+        const queuingTextPhrases: [string[], string[], string[], string[], string[]] = [
+            ["Parsing request intent...", "Just reading through that now...", "Reviewing your request...", "Understanding your goal..."],
+            ["Scanning internal knowledge base...", "Gathering all the relevant facts.", "Gathering the facts.", "Searching for the best info."],
+            ["Evaluating multi-step logic...", "Looking for patterns...", "Connecting the ideas.", "Organzing the details."],
+            ["Drafting the response...", "Putting it all together.", "Defining your response.", "Creating your answer."],
+            ["Finalizing output formatting...", "Almost there... Adding final touches...", "Adding the final touches.", "Checking for accuracy."]
+        ]
+        let currentPhraseIndex: number = -1;
+
+        while(this.awaitingResponse) {
+            const currentAvailablePhrases: string[] = queuingTextPhrases[currentPhraseIndex] ?? [];
+            const randomIndex: number = Math.floor(Math.random() * currentAvailablePhrases.length);
+            const textPhrase: string = currentAvailablePhrases[randomIndex] ?? ""; 
+            
+            queuingText.html(`<strong>AIB:</strong> ${textPhrase}`);
+
+            await new Promise((res) => setTimeout(res, timeBetweenPhrasesMS));
+            // cap current phrase index so it stays on the last stage if the response takes a long time
+            if (currentPhraseIndex < queuingTextPhrases.length - 1) {
+                currentPhraseIndex++;
+            }
         }
+        
+        queuingText.remove();
     }
 }
 

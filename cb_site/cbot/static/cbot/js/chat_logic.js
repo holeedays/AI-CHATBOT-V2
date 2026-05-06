@@ -1,9 +1,8 @@
-import { TypingFunctionalities } from "./text_manipulating.js";
 class ChatLogic {
     inputArea;
     chatWindow;
     submitButton;
-    tt;
+    awaitingResponse;
     ws;
     constructor() {
         // get all HTML elements
@@ -21,7 +20,7 @@ class ChatLogic {
         this.ws = new WebSocket(socketURL);
         this.initializeWebsocket();
         // misc
-        this.tt = new TypingFunctionalities.TextTyper();
+        this.awaitingResponse = false;
     }
     // connect submit button to a method
     initializeSubmitButton() {
@@ -63,9 +62,14 @@ class ChatLogic {
         userInput.append($("<strong></strong>").text("User:"));
         userInput.append(document.createTextNode(` ${trimmedMessage}`));
         this.chatWindow.append(userInput);
+        // clear our input area
         this.inputArea.val("");
         // await for a successful reset
         await this.reset();
+        // also start generating some queuing text to keep the person occupied
+        const timeBetweenPhraseMS = 4000;
+        this.generateQueuingText(timeBetweenPhraseMS);
+        // send our message
         const input_JSON = JSON.stringify({
             "message": trimmedMessage
         });
@@ -73,8 +77,6 @@ class ChatLogic {
     }
     // reset existing processes (used in onSubmit as a clear all thing)
     async reset() {
-        // reset the text typer, removing anything from the queue
-        await this.tt.reset();
         // remove the existing response if it exists
         const existing_stream = $("#response_stream");
         if (existing_stream.length != 0) {
@@ -83,7 +85,12 @@ class ChatLogic {
         }
     }
     // callback when our websocket gets a response (partial or full)
-    onResponse(ev) {
+    async onResponse(ev) {
+        this.awaitingResponse = false;
+        // Wait for queuing text to disappear
+        while ($("#queuing").length !== 0) {
+            await new Promise((res) => setTimeout(res, 50));
+        }
         let responseBody;
         let responseFinished;
         const data = JSON.parse(ev.data);
@@ -105,22 +112,54 @@ class ChatLogic {
         // check if it exists, if not, add the element
         if (newResponse.length === 0) {
             this.chatWindow.append(`
-                <p id="response_stream">
-                    <strong>AIB:</strong>
-                </p>
+                <pre>
+                    <div id="response_stream">
+                    </div>
+                </pre>
             `);
             newResponse = $("#response_stream");
         }
-        // queue the new response to be typed
-        const typeSpeedMS = 2;
-        this.tt.type(newResponse, responseBody, TypingFunctionalities.TypingStyles.BY_LETTER, typeSpeedMS);
-        // also check if response is finished, which we just cue at the end of the response being
-        // successfully typed
+        const htmlContent = marked.parse(responseBody);
+        // Update our response stream with the new content
+        newResponse.html(`<strong>AIB:</strong> ${htmlContent}`);
+        // also check if response is finished
         if (responseFinished) {
-            this.tt.finish();
             newResponse.removeAttr("id");
             newResponse.addClass("completed_response");
         }
+    }
+    // generate some text to keep the person occupied as a response is being generated
+    async generateQueuingText(timeBetweenPhrasesMS) {
+        this.awaitingResponse = true;
+        let queuingText = $("#queuing");
+        if (queuingText.length === 0) {
+            this.chatWindow.append(`
+                <p id="queuing"> 
+                    <strong>AIB:</strong>
+                </p>
+            `);
+            queuingText = $("#queuing");
+        }
+        const queuingTextPhrases = [
+            ["Parsing request intent...", "Just reading through that now...", "Reviewing your request...", "Understanding your goal..."],
+            ["Scanning internal knowledge base...", "Gathering all the relevant facts.", "Gathering the facts.", "Searching for the best info."],
+            ["Evaluating multi-step logic...", "Looking for patterns...", "Connecting the ideas.", "Organzing the details."],
+            ["Drafting the response...", "Putting it all together.", "Defining your response.", "Creating your answer."],
+            ["Finalizing output formatting...", "Almost there... Adding final touches...", "Adding the final touches.", "Checking for accuracy."]
+        ];
+        let currentPhraseIndex = -1;
+        while (this.awaitingResponse) {
+            const currentAvailablePhrases = queuingTextPhrases[currentPhraseIndex] ?? [];
+            const randomIndex = Math.floor(Math.random() * currentAvailablePhrases.length);
+            const textPhrase = currentAvailablePhrases[randomIndex] ?? "";
+            queuingText.html(`<strong>AIB:</strong> ${textPhrase}`);
+            await new Promise((res) => setTimeout(res, timeBetweenPhrasesMS));
+            // cap current phrase index so it stays on the last stage if the response takes a long time
+            if (currentPhraseIndex < queuingTextPhrases.length - 1) {
+                currentPhraseIndex++;
+            }
+        }
+        queuingText.remove();
     }
 }
 export default ChatLogic;
