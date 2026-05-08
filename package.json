@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "tailwind:watch": "tailwindcss -i C:/Users/weigh/Dropbox/AI-Chatbot-v2/cb_site/cbot/static/cbot/css/styling.css -o C:/Users/weigh/Dropbox/AI-Chatbot-v2/cb_site/cbot/static/cbot/css/output.css --watch",
+    "tailwind:build": "tailwindcss -i C:/Users/weigh/Dropbox/AI-Chatbot-v2/cb_site/cbot/static/cbot/css/styling.css -o C:/Users/weigh/Dropbox/AI-Chatbot-v2/cb_site/cbot/static/cbot/css/output.css --minify"
   },
   "repository": {
     "type": "git",
@@ -21,9 +23,12 @@
   "homepage": "https://github.com/holeedays/AI-CHATBOT-V2#readme",
   "devDependencies": {
     "@types/jquery": "^4.0.0",
-    "@types/marked": "^5.0.2"
+    "tailwindcss": "^4.2.4",
+    "ttf2woff2": "^8.0.1"
   },
   "dependencies": {
+    "@tailwindcss/cli": "^4.2.4",
+    "marked": "^11.0.1",
     "typescript": "^6.0.3"
   }
 }

@@ -10,7 +10,7 @@
     "module": "esnext",
     "target": "esnext",
     "lib": ["dom", "esnext"],
-    "types": ["jquery", "marked"],
+    "types": ["jquery"],
     // For nodejs:
     // "lib": ["esnext"],
     // "types": ["node"],
