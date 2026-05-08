@@ -37,7 +37,7 @@ class ChatGenerator():
 
         Also add reference footnotes and image references throughout the outline if any exist from the material. 
         If done so, keep the footnotes and the image reference citations at the end with clear indications where 
-        it attributes in the outline. Furthermore, include the full bibliographic sources (authors, links, and all) 
+        it attributes in the outline. Furthermore, include the full bibliographic sources (authors, links, titles, etc) 
         for the end since the user needs to be able to reference the source.
         """
 
@@ -65,8 +65,8 @@ class ChatGenerator():
         in the outline so see if you can add more to the response. 
         
         Also, if there are images/figures mentioned throughout the outline, embed the corresponding image links 
-        with the html <img> tag and limit the image to 700x700px max. You can refer to the image references in 
-        the end of the outline and in the image reference list to get the correct image link to embed.
+        with the html <img> tag and limit the image to 700x700px max and center it. You can refer to the image references 
+        in the end of the outline and in the image reference list to get the correct image link to embed.
 
         If the "Is new user key" is true, treat the user more formally. If it is false, be more warm and intimate to the user.
 
@@ -77,8 +77,9 @@ class ChatGenerator():
         
         Dumb hard concepts down and make it understandable for a high school freshman.
 
-        Keep the response same to the format of the outline. This means putting the actual footnote sources and figure citation 
-        sources at the bottom, keeping the response ~200 words max, and acknowleding the user.
+        Keep the format of this response same to the format of the outline. This means keeping and putting the full 
+        footnote sources and figure citation sources at the bottom (authors, titles, links, pages, etc), keeping the 
+        response ~200 words max, and acknowleding the user first and foremost.
         """
         al = ApiLogic()
         # setting up our variables to get a response
@@ -86,6 +87,8 @@ class ChatGenerator():
 
         # now generate our response stream
         try:
+            last_valid_response: dict[str, Any] = dict()
+
             async for chunk in al.generate_response_stream_openai(al.openai_model, prompt):
                 chunk_text: str | None = None
 
@@ -99,25 +102,39 @@ class ChatGenerator():
 
                 parsed_response: dict[str, Any] | None = jparser.parse(chunk_text) #type: ignore
 
-                is_final_chunk: bool = al.is_last_chunk_openai(chunk)
-
                 # if our parsed response is valid + the response key exists + "response" key is not null
                 if (not parsed_response is None 
                     and "response" in parsed_response
                     and not parsed_response["response"] is None): 
-                    # send our message
+                    
+                    last_valid_response = parsed_response 
+                    # send our update, always mark as not finished during the stream
                     await self.consumer.send(json.dumps({
-                            "message": parsed_response["response"], #type: ignore
-                            "is_finished": is_final_chunk
+                            "message": last_valid_response["response"], #type: ignore
+                            "is_finished": False
                         }))   
-                    # check if the request is completed, if so store the text in our database
-                    # we have a repeat because sometimes the api might "stutter" on the final chunks causing duplicates
-                    if (is_final_chunk):
-                        return parsed_response #type: ignore
                 
-                # if it was the final chunk but didn't have a valid response (e.g. metadata), we still exit
-                if (is_final_chunk):
-                    return parsed_response #type: ignore
+                if (al.is_last_chunk_openai(chunk)):
+                    break
+
+            # outside the loop, send the final completion signal with the last known good response
+            # we wait a small amount of time to ensure no stray chunks are still being processed
+            wait_time: float = 0.25
+            await asyncio.sleep(wait_time)
+
+            if (last_valid_response != dict()):
+                await self.consumer.send(json.dumps({
+                    "message": last_valid_response["response"], #type: ignore
+                    "is_finished": True
+                }))
+            else:
+                await self.consumer.send(json.dumps({
+                    "message": "", #type: ignore
+                    "is_finished": True
+                }))
+            
+            return last_valid_response
+
         except Exception as e: 
             print(traceback.print_exc())
             await self.consumer.send(json.dumps({
@@ -148,20 +165,20 @@ class ChatGenerator():
 
     # generating our greeting response
     async def generate_introduction_greeting_response(self):
-        intro_greeting: str = """
-            Hey and welcome to... Beautiful Architectures: An AI Retrospective. Right now this isn't the AI
-            speaking, it's actually me, the author. I just wanted to thank you for checking out this chatbot I made
-            that teaches you about the topics I cover in my essay. Be prepared and strap up for this journey and enjoy!
-        """
+        intro_greeting: str = (
+            "Hey and welcome to... Beautiful Architectures: An AI Retrospective. Right now this isn't the AI "
+            "speaking, it's actually me, the author. I just wanted to thank you for checking out this chatbot I made "
+            "that teaches you about the topics I cover in my essay. Be prepared and strap up for this journey and enjoy!"
+        )
         chars_per_send: int = 2
         type_time: float = 10/1000
         await self.generate_manual_response(intro_greeting, chars_per_send, type_time)
 
     # generating a response that greets the users if they have already been introduced (e.g. they aren't new)
     async def generate_familiar_greeting_response(self):
-        familiar_greeting: str = """
-            Hey! Welcome back, you can continue the chat where you left off with our little bot friend here.
-        """
+        familiar_greeting: str = (
+            "Hey! Welcome back, you can continue the chat where you left off with our little bot friend here."
+        )
         chars_per_send: int = 2
         type_time: float = 10/1000
         await self.generate_manual_response(familiar_greeting, chars_per_send, type_time)
@@ -169,26 +186,25 @@ class ChatGenerator():
 
     # generating our concluding response
     async def generate_concluding_response(self):
-        concluding_statement: str = """
-            Hey, the author back here at it again!. This concludes Beautiful Architectures: An AI Retrospective. 
-            I'm happy that you were somewhat interested and tuned in for the entire length of the essay. I hope you 
-            learned a few things from my essay. Maybe they are insightful, maybe they offer you to think in a different
-            perspective, maybe it didn't. Regardless, I hope you enjoyed this adventure as much as I had making it.
-
-            If you want to restart the journey and check it out again, just close your browser and access the chatbot again.
-            Otherwise, any other response from here would probably just give you the same message over and over again.
-            Anyways, have a great day and I'll see you very soon...
-        """
+        concluding_statement: str = (
+            "Hey, the author back here at it again!. This concludes Beautiful Architectures: An AI Retrospective. "
+            "I'm happy that you were somewhat interested and tuned in for the entire length of the essay. I hope you "
+            "learned a few things from my essay. Maybe they are insightful, maybe they offer you to think in a different "
+            "perspective, maybe it didn't. Regardless, I hope you enjoyed this adventure as much as I had making it.\n\n"
+            "If you want to restart the journey and check it out again, just close your browser and access the chatbot again. "
+            "Otherwise, any other response from here would probably just give you the same message over and over again. "
+            "Anyways, have a great day and I'll see you very soon..."
+        )
         chars_per_send: int = 2
         type_time: float = 10/1000
         await self.generate_manual_response(concluding_statement, chars_per_send, type_time)
 
     # and generate our final response, to cement the message that this is the end of the current chat
     async def generate_secondary_concluding_response(self):
-        secondary_concluding_statement: str = """
-            Like I had mentioned earlier, feel free to close your browser (that means closing all tabs) and access this 
-            page again.  
-        """
+        secondary_concluding_statement: str = (
+            "Like I had mentioned earlier, feel free to close your browser (that means closing all tabs) and access this "
+            "page again."
+        )
         chars_per_send: int = 2
         type_time: float = 10/1000
         await self.generate_manual_response(secondary_concluding_statement, chars_per_send, type_time)

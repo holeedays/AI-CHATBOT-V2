@@ -23,17 +23,17 @@ from typing import Any
 class DataCache():
     # django_request_obj should be an HttpRequest-like obj but channels calls it a _LazySession so I'll
     # make the type any and convert it in the constructor
-    def __init__(self, django_session_obj: Any) -> None:
-        self.django_session_obj: SessionBase = django_session_obj
+    def __init__(self, django_session_obj: Any = None) -> None:
+        self.django_session_obj: SessionBase | None = django_session_obj
+
+    ########################################################################### nonstatic methods (requires a session key)
 
     # get the session/cookie key of our django session
     def _get_session_key(self) -> str:
-        session_key = self.django_session_obj.session_key
-
-        if (session_key is None):
-            raise Exception("No django session key was found, please create one")
-
-        return session_key
+        if(not hasattr(self.django_session_obj, "session_key")):
+            raise Exception("You can't use this method without accessing a valid session key")
+        
+        return self.django_session_obj.session_key
     
     # get the current cookie session if any
     def get_current_cookie_session(self) -> mdls.CookieSession:
@@ -67,6 +67,10 @@ class DataCache():
         # chat is closed, then the cookie session stops directly referncing the chat session BUT the chat session will still
         # be linked to that cookie)
         current_cookie: mdls.CookieSession = self.get_current_cookie_session()
+        existing_chat: mdls.ChatSession | None = current_cookie.current_chat_session
+        if (not existing_chat is None):
+            return existing_chat
+
         # create our chat session or return the current one if it exists
         new_chat: mdls.ChatSession = mdls.ChatSession(context=[], cookie_session=current_cookie)
         new_chat.save()
@@ -78,8 +82,20 @@ class DataCache():
 
         return new_chat
 
+    # store whether this cookie session should temporarily show the compression holding page.
+    def set_cookie_context_compression_state(self, is_compressing: bool) -> None:
+        current_cookie: mdls.CookieSession = self.get_current_cookie_session()
+        current_cookie.is_compressing_context = is_compressing
+        current_cookie.save(update_fields=["is_compressing_context"])
+
+    # store the user's font preference so future page loads can reuse it.
+    def set_cookie_font_preference(self, use_plain_font: bool) -> None:
+        current_cookie: mdls.CookieSession = self.get_current_cookie_session()
+        current_cookie.use_plain_font = use_plain_font
+        current_cookie.save(update_fields=["use_plain_font"])
+
     # end and cache the current session 
-    def cache_chat_session(self) -> None:
+    def cache_current_chat_session(self) -> None:
         current_cookie: mdls.CookieSession = self.get_current_cookie_session()
         current_chat: mdls.ChatSession | None = current_cookie.current_chat_session
  
@@ -96,9 +112,31 @@ class DataCache():
             current_cookie.current_chat_session = None #type: ignore
             current_cookie.save()
 
+    # store a user and response pair into our chat context
+    def store_to_chat_context(self, user_input: str, response: dict[str, Any], chat_session_id: int | None = None) -> None:
+
+        if (chat_session_id is None):
+            current_cookie: mdls.CookieSession = self.get_current_cookie_session()
+            current_chat: mdls.ChatSession | None = current_cookie.current_chat_session
+        else:
+            current_chat = mdls.ChatSession.objects.filter(id=chat_session_id).first()
+
+        # if the chat doesn't exist, create a new one but only if a django session object exists
+        if (current_chat is None):
+            if (self.django_session_obj is not None):
+                current_chat = self.generate_chat_session()
+            else:
+                raise Exception("Cannot create a new chat session without an active Django session.")
+    
+        current_chat.context.append({"user": user_input, "system": response}) #type: ignore
+        current_chat.save() #type: ignore
+
+    ########################################################################### static methods (does not require a session key)
+
+    @staticmethod
     # cache a specific chat session directly, the chat model could be outside of the current cookie scope
     # much for flexible in this case
-    def cache_chat_session_manually(self, chat: mdls.ChatSession) -> None:
+    def cache_chat_session_manually(chat: mdls.ChatSession) -> None:
         cookie: mdls.CookieSession = chat.cookie_session
         if (chat.context != list()):
             al = ApiLogic()
@@ -109,16 +147,18 @@ class DataCache():
             cookie.current_chat_session = None #type: ignore
         cookie.save()
 
+    @staticmethod
     #  compress any chats here, not limited to current chat
-    def compress_chat_session(self, chat: mdls.ChatSession) -> None:
+    def compress_chat_session(chat: mdls.ChatSession) -> None:
         al = ApiLogic()
         chat_context_compressed: list[dict[str, Any]] = al.compress_context(al.gemini_model, 
                                                                             chat.context) #type: ignore
         chat.context = chat_context_compressed
         chat.save()
 
+    @staticmethod
     # compress any cookies here, not limited to current cookie
-    def compress_cookie_session(self, cookie: mdls.CookieSession) -> None:
+    def compress_cookie_session(cookie: mdls.CookieSession) -> None:
         al = ApiLogic()
         context_aggregate: list[dict[str, Any]] = list()
         for chat_context in cookie.context: #type: ignore
@@ -128,39 +168,38 @@ class DataCache():
         cookie.context = [compressed_cookie_context]
         cookie.save()
 
-    # store a user and response pair into our chat context
-    def store_to_chat_context(self, user_input: str, response: dict[str, Any], chat_session_id: int | None = None) -> None:
-
-        if (chat_session_id is None):
-            current_cookie: mdls.CookieSession = self.get_current_cookie_session()
-            current_chat: mdls.ChatSession | None = current_cookie.current_chat_session
-        else:
-            current_chat = mdls.ChatSession.objects.filter(id=chat_session_id).first()
-
-        # if the chat doesn't exist, create a new one
-        if (current_chat is None):
-            current_chat = self.generate_chat_session()
-    
-        current_chat.context.append({"user": user_input, "system": response}) #type: ignore
-        current_chat.save() #type: ignore
-
-    def change_reference_doc_of_cookie(self, new_reference_doc: mdls.Document | None, cookie: mdls.CookieSession) -> None:
+    @staticmethod
+    # change the current doc we're referencing in this specific cookie (or leave it as none)
+    def change_reference_doc_of_cookie(new_reference_doc: mdls.Document | None, cookie: mdls.CookieSession) -> None:
         cookie.reference_doc = new_reference_doc
         cookie.used_chunks_indices = list()
         cookie.current_chunk_index_of_reference_doc = None
         cookie.save()
 
-    def change_chunk_index_of_cookie(self, new_chunk_index: int, cookie: mdls.CookieSession):
+    @staticmethod
+    # change the chunk (by index) of the current reference doc of this cookie to a new chunk of that doc
+    def change_chunk_index_of_cookie(new_chunk_index: int, cookie: mdls.CookieSession):
         if (not cookie.current_chunk_index_of_reference_doc is None):
             cookie.used_chunks_indices.append(cookie.current_chunk_index_of_reference_doc)
         cookie.current_chunk_index_of_reference_doc = new_chunk_index
         cookie.save()
 
-    def get_chats(self, **attributes: Any) -> list[mdls.ChatSession]:
+    @staticmethod
+    def remove_cached_cookies(cookies: mdls.CookieSession | list[mdls.CookieSession]):
+        if (isinstance(cookies, list)):
+            for cookie in cookies:
+                cookie.delete()
+        else:
+            cookies.delete()
+
+    @staticmethod
+    def get_chats(**attributes: Any) -> list[mdls.ChatSession]:
         return list(mdls.ChatSession.objects.filter(**attributes).all())
     
-    def get_cookies(self, **attributes: Any) -> list[mdls.CookieSession]:
+    @staticmethod
+    def get_cookies(**attributes: Any) -> list[mdls.CookieSession]:
         return list(mdls.CookieSession.objects.filter(**attributes).all())
 
-    def get_documents(self, **attributes: Any) -> list[mdls.Document]:
+    @staticmethod
+    def get_documents(**attributes: Any) -> list[mdls.Document]:
         return list(mdls.Document.objects.filter(**attributes).all())

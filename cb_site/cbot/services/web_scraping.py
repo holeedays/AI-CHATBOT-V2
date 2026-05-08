@@ -1,3 +1,10 @@
+import sys
+import asyncio
+# this is just a fix for django channels and playwright's chromium launcher, we have to implement it in
+# the asgi.py file in our root and manage.py
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 
@@ -64,21 +71,57 @@ class WebScraper():
     async def ascrape_playwright(self, 
                                  url: str, 
                                  tags: list[str] = ["h1", "h2", "h3", "h4", "span", "p", "div"]) -> str:
-        print("Started scraping...")
-        results = ""
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+        import threading
+        import asyncio
+        from concurrent.futures import Future
+
+        # This inner function will run in a separate thread
+        def run_in_thread(url: str, tags: list[str], future: Future):
+            # Create a NEW event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Force ProactorEventLoop if on Windows; idk why on my pc normal wsgi is activating rather than the asgi
+            # interface, which is preventing playwright from working; also I recommend running 'playwright install'
+            # to install the chromium interface too
+            if sys.platform == 'win32':
+                # We can't easily change the loop type once created, 
+                # but we can try to create a Proactor one specifically.
+                loop = asyncio.WindowsProactorEventLoopPolicy().new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # our actual scraping method
+            async def internal_scrape():
+                print(f"Scraper thread event loop: {type(asyncio.get_running_loop())}")
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True)
+                    try:
+                        page = await browser.new_page()
+                        await page.goto(url)
+                        page_source = await page.content()
+                        results = self._remove_unecssesary_lines(self._extract_tags(self._remove_unwanted_tags(
+                            page_source), tags))
+                        return results
+                    except Exception as e:
+                        return f"Error: {e}"
+                    finally:
+                        await browser.close()
+
             try:
-                page = await browser.new_page()
-                await page.goto(url)
-
-                page_source = await page.content()
-
-                results = self._remove_unecssesary_lines(self._extract_tags(self._remove_unwanted_tags(
-                    page_source), tags))
-                print("Content has been scraped")
+                result = loop.run_until_complete(internal_scrape())
+                if not future.cancelled():
+                    future.set_result(result)
             except Exception as e:
-                results = f"Error: {e}"
-            await browser.close()
+                if not future.cancelled():
+                    future.set_exception(e)
+            finally:
+                loop.close()
 
-        return results
+        # Execute the scraper in a separate thread to ensure it has its own Proactor loop
+        print("Delegating scraping to a Proactor-friendly thread...")
+        scraping_future = Future()
+        thread = threading.Thread(target=run_in_thread, args=(url, tags, scraping_future))
+        thread.start()
+        
+        # Wait for the thread to finish and return the result
+        return await asyncio.wrap_future(scraping_future)

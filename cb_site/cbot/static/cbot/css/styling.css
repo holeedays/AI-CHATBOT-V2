@@ -1,0 +1,183 @@
+@import "tailwindcss";
+
+@font-face {
+    font-family: "Biro";
+    src: url("../fonts/Biro Script Plus US.woff2") format("woff2"),
+         url("../fonts/Biro Script Plus US.ttf") format("truetype");
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Biro";
+    src: url("../fonts/Biro Script Bold Plus US.woff2") format("woff2"),
+         url("../fonts/Biro Script Bold Plus US.ttf") format("truetype");
+    font-weight: bold;
+    font-style: normal;
+}
+
+
+@theme {
+    --font-display: "Biro";
+    --color-brand: #18181b;
+}
+
+* { 
+    font-family: "Biro", sans-serif;
+}
+
+body.font-switch-plain * {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* base tags */
+@layer components {
+    strong {
+        /* text-sizing */
+        @apply font-bold text-[25px];
+    }
+
+    div {
+        /* text-sizing */
+        @apply text-[25px];
+    }
+
+    li {
+        /* text-sizing */
+        @apply text-[25px];
+    }
+    
+    pre {
+        /* text spacing */
+        @apply whitespace-pre-wrap break-words;
+    }
+}
+
+/* macro level containers */
+@layer components {
+    .main_area {
+        /* content formatting */
+        @apply mx-auto w-3/5 text-left break-words;
+    }
+
+    .user_bar {
+        /* content formatting */
+        @apply flex w-full items-stretch gap-2;
+    }
+
+    .misc {
+        @apply flex w-full items-center justify-end gap-2;
+        @apply mt-2;
+    }
+
+}
+
+/* chat-related interface */
+@layer components {
+    /* user response chunk */
+    .user_input_wrapper {
+        /* text spacing */
+        @apply text-right;
+    }
+    /* AI response chunk */
+    .ai_response_wrapper {
+        /* text spacing */
+        @apply text-left;
+    }
+
+    .submit_button {
+        /* color */
+        @apply bg-[color:var(--color-brand)] text-white text-2xl;
+        @apply rounded;
+        /* layout */
+        @apply inline-flex items-center justify-center self-end;
+        @apply px-6 py-1; 
+        /* animations */
+        @apply transition-colors duration-200 hover:bg-zinc-600 cursor-pointer;
+    }
+
+    .font_switch_button {
+        /* color */
+        @apply bg-[color:var(--color-brand)] text-white text-2xl;
+        @apply rounded-full;
+        /* layout */
+        @apply inline-flex items-center justify-center gap-3 self-end;
+        @apply px-4 py-1;
+        /* animations */
+        @apply transition-colors duration-200 hover:bg-zinc-600 cursor-pointer;
+    }
+
+    /* components of font font switch button */
+    .font_switch_button.is-active {
+        @apply bg-zinc-700;
+    }
+
+    .font_switch_label {
+        @apply text-xl leading-none;
+    }
+
+    .font_switch_track {
+        @apply relative inline-flex h-7 w-14 items-center rounded-full bg-white/25 transition-colors duration-200;
+    }
+
+    .font_switch_button.is-active .font_switch_track {
+        @apply bg-white/40;
+    }
+
+    .font_switch_thumb {
+        @apply absolute left-1 h-5 w-5 rounded-full bg-white transition-transform duration-200;
+    }
+
+    .font_switch_button.is-active .font_switch_thumb {
+        transform: translateX(1.5rem);
+    }
+
+    /* our text area or what the user fills in */
+    .input_area {
+        /* border */
+        @apply border-2 border-gray-800 border-solid;
+        /* layout */
+        @apply grow inline-flex;
+        @apply min-h-[40px] overflow-y-hidden resize-none box-border;
+        /* text */
+        @apply text-[25px] py-1 px-2;
+    }
+}
+
+/* miscellaneous (includes queue text elements and compression elements) */
+@layer components {
+    /* compression page elements */
+    .compression_page {
+        @apply min-h-screen flex items-center justify-center;
+    }
+
+    .compression_view {
+        @apply w-full flex justify-center;
+    }
+
+    .compression_status_panel {
+        @apply flex items-center justify-center gap-2 text-center;
+        width: 34rem;
+    }
+
+    .compression_status_text {
+        @apply inline-block text-[25px] text-center;
+        width: 28rem;
+    }
+
+    /* queue specific css styling */
+    #queue {
+        @apply inline-flex flex-col;
+    }
+
+    /* container for the loading gif and text message */
+    #queue_text_message {
+        @apply inline align-middle text-[25px];
+    }
+
+    .loading_gif {
+        @apply inline-block align-middle;
+        height: 2em;
+        width: auto;
+    }
+}

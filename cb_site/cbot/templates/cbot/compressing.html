@@ -1,0 +1,31 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preparing your chat</title>
+
+    <!-- JQUERY CDN -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <link rel="stylesheet" href="{% static 'cbot/css/output.css' %}">
+</head>
+<body
+    class="compression_page{% if use_plain_font %} font-switch-plain{% endif %}"
+    data-status-url="{{ status_url }}"
+    data-chat-url="{{ chat_url }}"
+>
+    <div id="compression_view" class="compression_view">
+        <div id="compression_status_panel" class="compression_status_panel">
+            <img
+                class="loading_gif"
+                src="{% static 'cbot/images/GIFs/loading.gif' %}"
+                alt="Loading"
+            >
+            <span id="compression_status_text" class="compression_status_text"></span>
+        </div>
+    </div>
+
+    <script type="module" src="{% static 'cbot/js/compressing_check.js' %}"></script>
+</body>
+</html>

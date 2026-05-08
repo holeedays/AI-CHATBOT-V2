@@ -134,9 +134,9 @@ CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 
 # Celery Beat Schedule
 from datetime import timedelta
-CELERY_BEAT_SCHEDULE = { #type: ignore
+CELERY_BEAT_SCHEDULE = { 
     'cleanup-old-sessions-at-midnight': {
-        'task': 'cbot.tasks.cleanup_unused_sessions',
+        'task': 'cbot.tasks.clean_up_old_cookies',
         'schedule': timedelta(days=1), 
     }, 
 }

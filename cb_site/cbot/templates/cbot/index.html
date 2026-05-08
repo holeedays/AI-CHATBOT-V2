@@ -4,21 +4,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>Chat</title>
 
     <!-- JQUERY CDN -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     <!-- Marked CDN-->
     <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
+    <link rel="stylesheet" href="{% static 'cbot/css/output.css' %}">
 </head>
-<body>
+<body
+    {% if use_plain_font %}class="font-switch-plain"{% endif %}
+>
 
-    <div id="chat_window">
+    <div id="main_area" class="main_area">
+            <div id="chat_window" class="chat_window">
+            </div>
+            <div id="user_bar" class="user_bar">
+                <textarea id="input_area" class="input_area" placeholder="Type here" rows="1"></textarea>
+                <button id="submit_button" class="submit_button">Send</button>
+            </div>
+            <div id="misc" class="misc">
+                <button id="font_switch_button" class="font_switch_button"></button>
+            </div>
     </div>
-    <div id="user_bar">
-        <input id="input_area"></input>
-        <button id="submit_button"></button>
-    </div>
+
 
     <script type="module" src="{% static 'cbot/js/main.js' %}"></script>
 </body>

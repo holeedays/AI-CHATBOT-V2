@@ -1,0 +1,1 @@
+{"version":3,"file":"text_modifiers.d.ts","sourceRoot":"","sources":["../ts/text_modifiers.ts"],"names":[],"mappings":"AAMA,yBAAiB,aAAa,CAAC;IAE3B,MAAa,UAAU;QACnB,OAAO,CAAC,EAAE,CAAY;;QAOf,8BAA8B,CAAC,IAAI,EAAE,MAAM,EAAE,YAAY,EAAE,MAAM,EAAE,aAAa,EAAE,MAAM,GAAG,MAAM;QAwC3F,aAAa,CAAC,IAAI,EAAE,MAAM,GAAG,OAAO,CAAC,MAAM,CAAC;KAM5D;CAGJ"}

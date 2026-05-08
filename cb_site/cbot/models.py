@@ -24,6 +24,11 @@ class CookieSession(models.Model):
     # instantiates our context as list by default, since the history is sequential;
     # think of this context as a refresher of previous convos
     context = models.JSONField(default=list) #type: ignore
+    # this field is a flag to determine whether the user should be redirected to the chatbot page or a waiting page
+    # as we wait for the contxt to compress
+    is_compressing_context = models.BooleanField(default=False)
+    # this is a frontend thing, just saves the state of our current font throughout the cookie's lifespan
+    use_plain_font = models.BooleanField(default=False)
     # these hold the continuum of our conversation state, so users can come back and immediately resume wheree
     # they left off
     reference_doc: models.ForeignKey["Document"] | models.ForeignKey[None] = models.ForeignKey(
